@@ -80,6 +80,16 @@ def fetch_recommenations(count=10):
     return res[:count]
 
 
+def get_user_info(hashtag="redbull"):
+    url = "https://www.tiktok.com/@{}".format(hashtag)
+
+    r = session.get(url, headers=headers)
+    if r.status_code != 200:
+        return None
+
+    return extract_stateinfo(r.content)
+
+
 if __name__ == '__main__':
     print('[=>] TikTok Fashion Scraper Starting')
 
@@ -90,19 +100,22 @@ if __name__ == '__main__':
         exit(0)
     print(r.cookies)
 
-    recomd = fetch_recommenations(10)
-    if not recomd:
-        print("[!] Failed to get to Recommended Posts")
-        exit(0)
+    # recomd = fetch_recommenations(10)
+    # if not recomd:
+    #     print("[!] Failed to get to Recommended Posts")
+    #     exit(0)
 
-    count = 0
-    for rec in recomd:
-        print(f'[=>] Post {count + 1}: {rec["id"]}')
-        print(f'[*] Description: {rec["desc"]}')
-        print(f'[*] Play Count: {rec["stats"]["playCount"]}')
-        print(f'[*] Share Count: {rec["stats"]["shareCount"]}')
-        print(f'[*] Comment Count: {rec["stats"]["commentCount"]}')
-        print(f'[*] Author: {rec["author"]["nickname"]}')
-        print()
-        count += 1
+    # count = 0
+    # for rec in recomd:
+    #     print(f'[=>] Post {count + 1}: {rec["id"]}')
+    #     print(f'[*] Description: {rec["desc"]}')
+    #     print(f'[*] Play Count: {rec["stats"]["playCount"]}')
+    #     print(f'[*] Share Count: {rec["stats"]["shareCount"]}')
+    #     print(f'[*] Comment Count: {rec["stats"]["commentCount"]}')
+    #     print(f'[*] Author: {rec["author"]["nickname"]}')
+    #     print()
+    #     count += 1
+
+    get_user_info("redbull")
+    
     print("[=>] TikTok Fashion Scraper Stopped")
