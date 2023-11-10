@@ -106,19 +106,16 @@ def fetch_recommenations(count=10):
 
     params = get_params()
     params["from_page"] = "fyp"
-    params["count"] = count
-    params["coverFormat"] = "0"
+    params["count"] = 30
+
+    # Max cap for now
+    if count > 100:
+        count = 100
 
     res = []
-    first = True
+    found = 0
 
-    if count < 100:
-        realCount = count
-    else:
-        realCount = 100
-
-    while len(res) < count:
-        params["count"] = realCount
+    while found < count:
         result = fetch_data(encode_url(base_url, params), headers)
 
         if 'itemList' not in result:
@@ -126,27 +123,65 @@ def fetch_recommenations(count=10):
 
         for t in result.get("itemList", []):
             res.append(t)
+            found += 1
 
-        if not result.get("hasMore", False) and not first:
-            return res[:count]
+        if not result.get("hasMore", False):
+            return res
 
-        realCount = count - len(res)
-
-        first = False
+        count -= found
 
     return res[:count]
 
 
-def fetch_challenge(cid=11885, count=30):
+def fetch_challenge_info(challenge="fashion"):
+    base_url = "https://www.tiktok.com/api/challenge/detail/"
+
+    params = get_params()
+    params["from_page"] = "hashtag"
+    params["challengeName"] = challenge
+
+    result = fetch_data(encode_url(base_url, params), headers)
+    if ("challengeInfo" not in result) or result["statusCode"] != 0:
+        return None
+
+    return result["challengeInfo"]
+
+
+def fetch_tags_posts(hashtag="fashion", count=30):
+    tag_data = fetch_challenge_info(hashtag)
+
+    if not tag_data or "challenge" not in tag_data:
+        return None
+
+    tag_data = tag_data["challenge"]
+
     base_url = "https://www.tiktok.com/api/challenge/item_list/"
 
     params = get_params()
-    params["challengeID"] = cid
-    params["count"] = count
+    params["challengeID"] = tag_data["id"]
     params["coverFormat"] = "2"
     params["cursor"] = "0"
+    params["count"] = 30
 
-    return fetch_data(encode_url(base_url, params), headers)
+    res = []
+    found = 0
+
+    while found < count:
+        result = fetch_data(encode_url(base_url, params), headers)
+
+        if ("cursor" not in result and "itemList" not in result) or result["statusCode"] != 0:
+            break
+
+        for t in result.get("itemList", []):
+            res.append(t)
+            found += 1
+
+        if not result.get("hasMore", False):
+            return res
+
+        params["cursor"] = result["cursor"]
+
+    return res[:count]
 
 
 def get_user_info(hashtag="redbull"):
@@ -200,24 +235,40 @@ if __name__ == '__main__':
           };
         }""")
 
+        # fashion_data = fetch_tags_posts("fashion", count=30)
+        # if not fashion_data:
+        #     print("[!] Failed to get to Fashion Tag Posts")
+        #     session_close()
+        #
+        # count = 0
+        # for rec in fashion_data:
+        #     print(f'[=>] Post {count + 1}: {rec["id"]}')
+        #     print(f'[*] Description: {rec["desc"]}')
+        #     print(f'[*] Play Count: {rec["stats"]["playCount"]}')
+        #     print(f'[*] Share Count: {rec["stats"]["shareCount"]}')
+        #     print(f'[*] Comment Count: {rec["stats"]["commentCount"]}')
+        #     print(f'[*] Author: {rec["author"]["nickname"]}')
+        #     print()
+        #     count += 1
+
         # result = fetch_challenge()
         # print(result)
 
-        recomd = fetch_recommenations(10)
-        if not recomd:
-            print("[!] Failed to get to Recommended Posts")
-            session_close()
-
-        count = 0
-        for rec in recomd:
-            print(f'[=>] Post {count + 1}: {rec["id"]}')
-            print(f'[*] Description: {rec["desc"]}')
-            print(f'[*] Play Count: {rec["stats"]["playCount"]}')
-            print(f'[*] Share Count: {rec["stats"]["shareCount"]}')
-            print(f'[*] Comment Count: {rec["stats"]["commentCount"]}')
-            print(f'[*] Author: {rec["author"]["nickname"]}')
-            print()
-            count += 1
+        # recomd = fetch_recommenations(10)
+        # if not recomd:
+        #     print("[!] Failed to get to Recommended Posts")
+        #     session_close()
+        #
+        # count = 0
+        # for rec in recomd:
+        #     print(f'[=>] Post {count + 1}: {rec["id"]}')
+        #     print(f'[*] Description: {rec["desc"]}')
+        #     print(f'[*] Play Count: {rec["stats"]["playCount"]}')
+        #     print(f'[*] Share Count: {rec["stats"]["shareCount"]}')
+        #     print(f'[*] Comment Count: {rec["stats"]["commentCount"]}')
+        #     print(f'[*] Author: {rec["author"]["nickname"]}')
+        #     print()
+        #     count += 1
 
         session.browser.close()
 
