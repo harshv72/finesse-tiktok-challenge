@@ -14,9 +14,10 @@ configs = {
     "Lang": "en",
     "Locale": "en-US",
     "TimeZone": "America/Chicago",
-    "DefaultURL": "https://www.tiktok.com/@redbull?lang=en",
+    "DefaultURL": "https://www.tiktok.com/@redbull",
     "RndDeviceID": str(random.randint(10 ** 18, 10 ** 19 - 1)),
-    "UserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.28 Safari/537.36 Edg/120.0.6099.28",
+    # "UserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
 }
 
 # Common Headers for APIs
@@ -199,11 +200,58 @@ def get_user_info(hashtag="redbull"):
     return None
 
 
+def fetch_search_suggest(keyword="fashion"):
+    base_url = "https://www.tiktok.com/api/search/general/sug/"
+
+    params = get_params()
+    params["from_page"] = "search"
+    params["keyword"] = keyword
+
+    result = fetch_data(encode_url(base_url, params), headers)
+    if ("sug_list" not in result) or result["status_code"] != 0:
+        return None
+
+    return result["sug_list"]
+
+
+def fetch_search(keyword="fashion", count=10):
+    obj_type = "user"
+    base_url = f"https://www.tiktok.com/api/search/{obj_type}/full/"
+
+    params = get_params()
+    params["cursor"] = "0"
+    params["from_page"] = "search"
+    params["keyword"] = keyword
+    params["root_referer"] = configs["DefaultURL"]
+    params["web_search_code"] = """{"tiktok":{"client_params_x":{"search_engine":{"ies_mt_user_live_video_card_use_libra":1,"mt_search_general_user_live_card":1}},"search_server":{}}}"""
+
+    res = []
+    found = 0
+
+    while found < count:
+        result = fetch_data(encode_url(base_url, params), headers)
+        print(result)
+
+        if ("cursor" not in result and "user_list" not in result) or result["statusCode"] != 0:
+            break
+
+        for t in result.get("user_list", []):
+            res.append(t)
+            found += 1
+
+        if not result.get("hasMore", False):
+            return res
+
+        params["cursor"] = result["cursor"]
+
+    return res[:count]
+
+
 if __name__ == '__main__':
     print('[=>] TikTok Fashion Scraper Starting')
 
     with sync_playwright() as playwright:
-        mobile_device = playwright.devices['iPhone 14 Pro Max']
+        mobile_device = playwright.devices['Desktop Chrome']
 
         session.browser = playwright.chromium.launch(
             headless=True,
@@ -234,6 +282,20 @@ if __name__ == '__main__':
             browser_version: window.navigator.appVersion,
           };
         }""")
+
+        suggest = fetch_search_suggest("fashion")
+        if not suggest:
+            print("[!] Failed to get to Fashion Search Suggestions")
+            session_close()
+
+        print(suggest)
+
+        search_user = fetch_search("fashion", 10)
+        if not search_user:
+            print("[!] Failed to get to Search Users")
+            session_close()
+
+        print(search_user)
 
         # fashion_data = fetch_tags_posts("fashion", count=30)
         # if not fashion_data:
