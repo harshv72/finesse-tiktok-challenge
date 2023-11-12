@@ -1,6 +1,7 @@
 import json
 import random
 import requests
+from datetime import datetime
 from bs4 import BeautifulSoup
 from collections import namedtuple
 from urllib.parse import urlencode, quote
@@ -14,10 +15,11 @@ configs = {
     "Lang": "en",
     "Locale": "en-US",
     "TimeZone": "America/Chicago",
-    "DefaultURL": "https://www.tiktok.com/@redbull",
     "RndDeviceID": str(random.randint(10 ** 18, 10 ** 19 - 1)),
-    "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.28 Safari/537.36 Edg/120.0.6099.28",
+    "DefaultURL": "https://www.tiktok.com/@redbull/video/7285391124246646049",
+    # "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.28 Safari/537.36 Edg/120.0.6099.28",
     # "UserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    "UserAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
 }
 
 # Common Headers for APIs
@@ -71,13 +73,17 @@ def fetch_data(url, headers):
         () => {{
             return new Promise((resolve, reject) => {{
                 fetch('{url}', {{ method: 'GET', headers: {headers_js} }})
-                    .then(response => response.json())
+                    .then(response => response.text())
                     .then(data => resolve(data))
                     .catch(error => reject(error.message));
             }});
         }}
     """
-    return session.page.evaluate(js_fetch)
+    result = session.page.evaluate(js_fetch)
+    try:
+        return json.loads(result)
+    except ValueError as e:
+        return result
 
 
 def encode_url(base, params):
@@ -93,13 +99,21 @@ def session_close():
 
 def extract_stateinfo(content):
     soup = BeautifulSoup(content, 'html.parser')
+    res = {}
+    sigi_data = soup.find_all('script', {'id': 'SIGI_STATE'})
+    if len(sigi_data) > 0:
+        js_state = sigi_data[0]
+        unescaped = js_state.text.replace("//", "/")
+        res.update(json.loads(unescaped))
     hydra_data = soup.find_all('script', {'id': '__UNIVERSAL_DATA_FOR_REHYDRATION__'})
     if len(hydra_data) > 0:
         js_state = hydra_data[0]
         # js_state.text.encode('utf-8').decode('unicode_escape'), Corrupts the non-Ascii characters
         unescaped = js_state.text.replace("//", "/")
-        return json.loads(unescaped)
-    return None
+        unescaped = json.loads(unescaped)
+        if "__DEFAULT_SCOPE__" in unescaped:
+            res.update(unescaped)
+    return res
 
 
 def fetch_recommenations(count=10):
@@ -142,6 +156,7 @@ def fetch_challenge_info(challenge="fashion"):
     params["challengeName"] = challenge
 
     result = fetch_data(encode_url(base_url, params), headers)
+    print(result)
     if ("challengeInfo" not in result) or result["statusCode"] != 0:
         return None
 
@@ -193,10 +208,21 @@ def get_user_info(hashtag="redbull"):
         return None
 
     data = extract_stateinfo(r.content)
-    if "__DEFAULT_SCOPE__" in data:
-        data = data["__DEFAULT_SCOPE__"]
-        if "webapp.user-detail" in data:
-            return data["webapp.user-detail"]
+    if "webapp.user-detail" in data:
+        return data["webapp.user-detail"]
+    return None
+
+
+def get_comments_info(user="redbull", post="7285391124246646049"):
+    post_url = "https://www.tiktok.com/@{}/video/{}".format(user, post)
+
+    r = requests.get(post_url, headers=headers)
+    if r.status_code != 200:
+        return None
+
+    data = extract_stateinfo(r.content)
+    if "MobileSharingComment" in data:
+        return data["MobileSharingComment"]
     return None
 
 
@@ -220,6 +246,7 @@ def fetch_search(keyword="fashion", count=10):
 
     params = get_params()
     params["cursor"] = "0"
+    params["count"] = 20
     params["from_page"] = "search"
     params["keyword"] = keyword
     params["root_referer"] = configs["DefaultURL"]
@@ -247,11 +274,46 @@ def fetch_search(keyword="fashion", count=10):
     return res[:count]
 
 
+def fetch_post_comments(post_id="7198199504405843205", count=10):
+    base_url = f"https://www.tiktok.com/api/comment/list/"
+
+    params = get_params()
+    params["cursor"] = "0"
+    params["from_page"] = "video"
+    params["fromWeb"] = "1"
+    params["app_language"] = "ja-JP"
+    params["current_region"] = "JP"
+    params["aweme_id"] = post_id
+    params["is_non_personalized"] = "false"
+    params["enter_from"] = "tiktok_web"
+
+    res = []
+    found = 0
+
+    while found < count:
+        result = fetch_data(encode_url(base_url, params), headers)
+        print(result)
+
+        if ("cursor" not in result and "comments" not in result) or result["total"] < 1:
+            break
+
+        for t in result.get("comments", []):
+            res.append(t)
+            found += 1
+
+        if not result.get("hasMore", False):
+            return res
+
+        params["cursor"] = result["cursor"]
+
+    return res[:count]
+
+
 if __name__ == '__main__':
     print('[=>] TikTok Fashion Scraper Starting')
 
     with sync_playwright() as playwright:
-        mobile_device = playwright.devices['Desktop Chrome']
+        mobile_device = playwright.devices['iPhone 14 Pro Max']
 
         session.browser = playwright.chromium.launch(
             headless=True,
@@ -283,35 +345,60 @@ if __name__ == '__main__':
           };
         }""")
 
-        suggest = fetch_search_suggest("fashion")
-        if not suggest:
-            print("[!] Failed to get to Fashion Search Suggestions")
-            session_close()
+        cookies = session.context.cookies()
+        cookies = {cookie["name"]: cookie["value"] for cookie in cookies}
+        print(cookies)
 
-        print(suggest)
+        # comments = get_comments_info()
+        # if not comments:
+        #     print("[!] Failed to get to Comments for Post")
+        #     session_close()
+        # print(comments)
 
-        search_user = fetch_search("fashion", 10)
-        if not search_user:
-            print("[!] Failed to get to Search Users")
-            session_close()
-
-        print(search_user)
-
-        # fashion_data = fetch_tags_posts("fashion", count=30)
-        # if not fashion_data:
-        #     print("[!] Failed to get to Fashion Tag Posts")
+        # suggest = fetch_search_suggest("fashion")
+        # if not suggest:
+        #     print("[!] Failed to get to Fashion Search Suggestions")
         #     session_close()
         #
-        # count = 0
-        # for rec in fashion_data:
-        #     print(f'[=>] Post {count + 1}: {rec["id"]}')
-        #     print(f'[*] Description: {rec["desc"]}')
-        #     print(f'[*] Play Count: {rec["stats"]["playCount"]}')
-        #     print(f'[*] Share Count: {rec["stats"]["shareCount"]}')
-        #     print(f'[*] Comment Count: {rec["stats"]["commentCount"]}')
-        #     print(f'[*] Author: {rec["author"]["nickname"]}')
-        #     print()
-        #     count += 1
+        # print(suggest)
+
+        fashion_data = fetch_tags_posts("fashion", count=30)
+        if not fashion_data:
+            print("[!] Failed to get to Fashion Tag Posts")
+            session_close()
+
+        count = 0
+        for rec in fashion_data:
+            print(f'[=>] Post {count + 1}:')
+            print(f'[*] ID: {rec["id"]}')
+            desc = rec["desc"]
+            hashpos = desc.find("#")
+            hashtags = desc[hashpos:]
+            desc = desc[:hashpos]
+            print(f'[*] Description: {desc}')
+            print(f'[*] HashTags: {hashtags}')
+            print(f'[*] Play Count: {rec["stats"]["playCount"]}')
+            print(f'[*] Share Count: {rec["stats"]["shareCount"]}')
+            print(f'[*] Comment Count: {rec["stats"]["commentCount"]}')
+            print(f'[*] Author: {rec["author"]["nickname"]}')
+            print(f'[*] Author User: {rec["author"]["uniqueId"]}')
+            comments = get_comments_info(rec["author"]["uniqueId"], rec["id"])
+            if not comments:
+                print("[!] Failed to get to Comments for Post")
+            else:
+                print(f'[*] Total Comments: {comments["total"]}')
+                for comts in comments["comments"]:
+                    print(f'[*] Comment: {comts["text"]}')
+            if 'music' in rec:
+                print(f'[*] Post Music: {rec["music"]["title"]}')
+            print(f'[*] Post Date: {datetime.fromtimestamp(rec["createTime"])}')
+            print(f'[*] Collected Date: {datetime.now()}')
+            print(f'[*] Post URL: https://www.tiktok.com/@{rec["author"]["uniqueId"]}/{rec["id"]}')
+            print()
+            count += 1
+
+        # result = fetch_post_comments("7198199504405843205", 10)
+        # print(result)
 
         # result = fetch_challenge()
         # print(result)
