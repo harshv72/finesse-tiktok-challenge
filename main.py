@@ -1,6 +1,7 @@
 import json
 import random
 import requests
+import pandas as pd
 from datetime import datetime
 from bs4 import BeautifulSoup
 from collections import namedtuple
@@ -156,7 +157,6 @@ def fetch_challenge_info(challenge="fashion"):
     params["challengeName"] = challenge
 
     result = fetch_data(encode_url(base_url, params), headers)
-    print(result)
     if ("challengeInfo" not in result) or result["statusCode"] != 0:
         return None
 
@@ -347,7 +347,7 @@ if __name__ == '__main__':
 
         cookies = session.context.cookies()
         cookies = {cookie["name"]: cookie["value"] for cookie in cookies}
-        print(cookies)
+        print("[*] Cookies: ", cookies)
 
         # comments = get_comments_info()
         # if not comments:
@@ -361,41 +361,6 @@ if __name__ == '__main__':
         #     session_close()
         #
         # print(suggest)
-
-        fashion_data = fetch_tags_posts("fashion", count=30)
-        if not fashion_data:
-            print("[!] Failed to get to Fashion Tag Posts")
-            session_close()
-
-        count = 0
-        for rec in fashion_data:
-            print(f'[=>] Post {count + 1}:')
-            print(f'[*] ID: {rec["id"]}')
-            desc = rec["desc"]
-            hashpos = desc.find("#")
-            hashtags = desc[hashpos:]
-            desc = desc[:hashpos]
-            print(f'[*] Description: {desc}')
-            print(f'[*] HashTags: {hashtags}')
-            print(f'[*] Play Count: {rec["stats"]["playCount"]}')
-            print(f'[*] Share Count: {rec["stats"]["shareCount"]}')
-            print(f'[*] Comment Count: {rec["stats"]["commentCount"]}')
-            print(f'[*] Author: {rec["author"]["nickname"]}')
-            print(f'[*] Author User: {rec["author"]["uniqueId"]}')
-            comments = get_comments_info(rec["author"]["uniqueId"], rec["id"])
-            if not comments:
-                print("[!] Failed to get to Comments for Post")
-            else:
-                print(f'[*] Total Comments: {comments["total"]}')
-                for comts in comments["comments"]:
-                    print(f'[*] Comment: {comts["text"]}')
-            if 'music' in rec:
-                print(f'[*] Post Music: {rec["music"]["title"]}')
-            print(f'[*] Post Date: {datetime.fromtimestamp(rec["createTime"])}')
-            print(f'[*] Collected Date: {datetime.now()}')
-            print(f'[*] Post URL: https://www.tiktok.com/@{rec["author"]["uniqueId"]}/{rec["id"]}')
-            print()
-            count += 1
 
         # result = fetch_post_comments("7198199504405843205", 10)
         # print(result)
@@ -418,6 +383,80 @@ if __name__ == '__main__':
         #     print(f'[*] Author: {rec["author"]["nickname"]}')
         #     print()
         #     count += 1
+
+        fashion_data = fetch_tags_posts("fashion", count=30)
+        if not fashion_data:
+            print("[!] Failed to get to Fashion Tag Posts")
+            session_close()
+
+        count = 0
+        df_data = {
+            "Post URL": [],
+            "User": [],
+            "Author Name": [],
+            "Likes": [],
+            "Views": [],
+            "Shares": [],
+            "Comments": [],
+            "Comments Data": [],
+            "Caption": [],
+            "HashTags": [],
+            "Music": [],
+            "Date Posted": [],
+            "Date Collected": [],
+        }
+
+        for rec in fashion_data:
+            print(f'[=>] Post {count + 1}:')
+            print(f'[*] ID: {rec["id"]}')
+            desc = rec["desc"]
+            hashpos = desc.find("#")
+            hashtags = desc[hashpos:]
+            desc = desc[:hashpos]
+            print(f'[*] Caption: {desc}')
+            print(f'[*] HashTags: {hashtags}')
+            print(f'[*] Like Count: {rec["stats"]["diggCount"]}')
+            print(f'[*] View Count: {rec["stats"]["playCount"]}')
+            print(f'[*] Share Count: {rec["stats"]["shareCount"]}')
+            print(f'[*] Comment Count: {rec["stats"]["commentCount"]}')
+            print(f'[*] Author: {rec["author"]["nickname"]}')
+            print(f'[*] Author User: {rec["author"]["uniqueId"]}')
+            comments_data = []
+            comments = get_comments_info(rec["author"]["uniqueId"], rec["id"])
+            if not comments:
+                print("[!] Failed to get to Comments for Post")
+            else:
+                print(f'[*] Total Comments: {comments["total"]}')
+                for comts in comments["comments"]:
+                    comments_data.append(comts["text"])
+                    print(f'[*] Comment: {comts["text"]}')
+            if 'music' in rec:
+                print(f'[*] Post Music: {rec["music"]["title"]}')
+            print(f'[*] Post Date: {datetime.fromtimestamp(rec["createTime"])}')
+            print(f'[*] Collected Date: {datetime.now()}')
+            print(f'[*] Post URL: https://www.tiktok.com/@{rec["author"]["uniqueId"]}/{rec["id"]}')
+
+            # Add to data cache
+            df_data["Post URL"].append(f'https://www.tiktok.com/@{rec["author"]["uniqueId"]}/{rec["id"]}')
+            df_data["User"].append(rec["author"]["uniqueId"])
+            df_data["Author Name"].append(rec["author"]["nickname"])
+            df_data["Likes"].append(rec["stats"]["diggCount"])
+            df_data["Views"].append(rec["stats"]["playCount"])
+            df_data["Shares"].append(rec["stats"]["shareCount"])
+            df_data["Comments"].append(rec["stats"]["commentCount"])
+            df_data["Comments Data"].append(comments_data)
+            df_data["Caption"].append(desc)
+            df_data["HashTags"].append(hashtags)
+            df_data["Music"].append(rec["music"]["title"] if 'music' in rec else '')
+            df_data["Date Posted"].append(datetime.fromtimestamp(rec["createTime"]))
+            df_data["Date Collected"].append(datetime.now())
+
+            count += 1
+
+        # CSV export through dataframe
+        df_fashion = pd.DataFrame(df_data)
+        curr_timestamp = datetime.timestamp(datetime.now())
+        df_fashion.to_csv(f"sample_fashion_posts-{int(curr_timestamp)}.csv", index=False)
 
         session.browser.close()
 
