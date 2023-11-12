@@ -384,7 +384,7 @@ if __name__ == '__main__':
         #     print()
         #     count += 1
 
-        fashion_data = fetch_tags_posts("fashion", count=30)
+        fashion_data = fetch_tags_posts("fashion", count=100)
         if not fashion_data:
             print("[!] Failed to get to Fashion Tag Posts")
             session_close()
@@ -407,34 +407,38 @@ if __name__ == '__main__':
         }
 
         for rec in fashion_data:
-            print(f'[=>] Post {count + 1}:')
-            print(f'[*] ID: {rec["id"]}')
+            print(f'[=>] Post {count + 1}')
+            # print(f'[*] ID: {rec["id"]}')
+
             desc = rec["desc"]
             hashpos = desc.find("#")
             hashtags = desc[hashpos:]
             desc = desc[:hashpos]
-            print(f'[*] Caption: {desc}')
-            print(f'[*] HashTags: {hashtags}')
-            print(f'[*] Like Count: {rec["stats"]["diggCount"]}')
-            print(f'[*] View Count: {rec["stats"]["playCount"]}')
-            print(f'[*] Share Count: {rec["stats"]["shareCount"]}')
-            print(f'[*] Comment Count: {rec["stats"]["commentCount"]}')
-            print(f'[*] Author: {rec["author"]["nickname"]}')
-            print(f'[*] Author User: {rec["author"]["uniqueId"]}')
+
+            # print(f'[*] Caption: {desc}')
+            # print(f'[*] HashTags: {hashtags}')
+            # print(f'[*] Like Count: {rec["stats"]["diggCount"]}')
+            # print(f'[*] View Count: {rec["stats"]["playCount"]}')
+            # print(f'[*] Share Count: {rec["stats"]["shareCount"]}')
+            # print(f'[*] Comment Count: {rec["stats"]["commentCount"]}')
+            # print(f'[*] Author: {rec["author"]["nickname"]}')
+            # print(f'[*] Author User: {rec["author"]["uniqueId"]}')
+
             comments_data = []
             comments = get_comments_info(rec["author"]["uniqueId"], rec["id"])
             if not comments:
                 print("[!] Failed to get to Comments for Post")
             else:
-                print(f'[*] Total Comments: {comments["total"]}')
+                # print(f'[*] Total Comments: {comments["total"]}')
                 for comts in comments["comments"]:
                     comments_data.append(comts["text"])
-                    print(f'[*] Comment: {comts["text"]}')
-            if 'music' in rec:
-                print(f'[*] Post Music: {rec["music"]["title"]}')
-            print(f'[*] Post Date: {datetime.fromtimestamp(rec["createTime"])}')
-            print(f'[*] Collected Date: {datetime.now()}')
-            print(f'[*] Post URL: https://www.tiktok.com/@{rec["author"]["uniqueId"]}/{rec["id"]}')
+                    # print(f'[*] Comment: {comts["text"]}')
+
+            # if 'music' in rec:
+            #     print(f'[*] Post Music: {rec["music"]["title"]}')
+            # print(f'[*] Post Date: {datetime.fromtimestamp(rec["createTime"])}')
+            # print(f'[*] Collected Date: {datetime.now()}')
+            # print(f'[*] Post URL: https://www.tiktok.com/@{rec["author"]["uniqueId"]}/{rec["id"]}')
 
             # Add to data cache
             df_data["Post URL"].append(f'https://www.tiktok.com/@{rec["author"]["uniqueId"]}/{rec["id"]}')
