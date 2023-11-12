@@ -309,6 +309,95 @@ def fetch_post_comments(post_id="7198199504405843205", count=10):
     return res[:count]
 
 
+def scrap_fashion_posts():
+    count = 0
+    df_data = {
+        "Post URL": [],
+        "User": [],
+        "Author Name": [],
+        "Likes": [],
+        "Views": [],
+        "Shares": [],
+        "Comments": [],
+        "Comments Data": [],
+        "Caption": [],
+        "HashTags": [],
+        "Music": [],
+        "Date Posted": [],
+        "Date Collected": [],
+    }
+
+    fashion_data = []
+
+    # Fetch posts from different tags
+    tags = [("fashion", 30), ("outfit", 30), ("fashionweek", 30), ("streetwear", 10)]
+    for tag in tags:
+        post_data = fetch_tags_posts(tag[0], count=tag[1])
+        if not post_data:
+            print(f"[!] Failed to get to {tag[0]} Tag Posts")
+        else:
+            print(f'[=>] Tag: {tag[0]}, Count: {tag[1]}')
+            fashion_data.extend(post_data)
+
+    for rec in fashion_data:
+        print(f'[=>] Post {count + 1}')
+        # print(f'[*] ID: {rec["id"]}')
+
+        desc = rec["desc"]
+        hashpos = desc.find("#")
+        hashtags = desc[hashpos:]
+        desc = desc[:hashpos]
+
+        # print(f'[*] Caption: {desc}')
+        # print(f'[*] HashTags: {hashtags}')
+        # print(f'[*] Like Count: {rec["stats"]["diggCount"]}')
+        # print(f'[*] View Count: {rec["stats"]["playCount"]}')
+        # print(f'[*] Share Count: {rec["stats"]["shareCount"]}')
+        # print(f'[*] Comment Count: {rec["stats"]["commentCount"]}')
+        # print(f'[*] Author: {rec["author"]["nickname"]}')
+        # print(f'[*] Author User: {rec["author"]["uniqueId"]}')
+
+        comments_data = []
+        comments = get_comments_info(rec["author"]["uniqueId"], rec["id"])
+        if not comments:
+            print("[!] Failed to get to Comments for Post")
+        else:
+            # print(f'[*] Total Comments: {comments["total"]}')
+            for comts in comments["comments"]:
+                comments_data.append(comts["text"])
+                # print(f'[*] Comment: {comts["text"]}')
+
+        # if 'music' in rec:
+        #     print(f'[*] Post Music: {rec["music"]["title"]}')
+        # print(f'[*] Post Date: {datetime.fromtimestamp(rec["createTime"])}')
+        # print(f'[*] Collected Date: {datetime.now()}')
+        # print(f'[*] Post URL: https://www.tiktok.com/@{rec["author"]["uniqueId"]}/{rec["id"]}')
+
+        # Add to data cache
+        df_data["Post URL"].append(f'https://www.tiktok.com/@{rec["author"]["uniqueId"]}/{rec["id"]}')
+        df_data["User"].append(rec["author"]["uniqueId"])
+        df_data["Author Name"].append(rec["author"]["nickname"])
+        df_data["Likes"].append(rec["stats"]["diggCount"])
+        df_data["Views"].append(rec["stats"]["playCount"])
+        df_data["Shares"].append(rec["stats"]["shareCount"])
+        df_data["Comments"].append(rec["stats"]["commentCount"])
+        df_data["Comments Data"].append(comments_data)
+        df_data["Caption"].append(desc)
+        df_data["HashTags"].append(hashtags)
+        df_data["Music"].append(rec["music"]["title"] if 'music' in rec else '')
+        df_data["Date Posted"].append(datetime.fromtimestamp(rec["createTime"]))
+        df_data["Date Collected"].append(datetime.now())
+
+        count += 1
+
+    # CSV export through dataframe
+    df_fashion = pd.DataFrame(df_data)
+    curr_timestamp = datetime.timestamp(datetime.now())
+    file_name = f"sample_fashion_posts-{int(curr_timestamp)}.csv"
+    df_fashion.to_csv(file_name, index=False)
+    return file_name
+
+
 if __name__ == '__main__':
     print('[=>] TikTok Fashion Scraper Starting')
 
@@ -384,83 +473,8 @@ if __name__ == '__main__':
         #     print()
         #     count += 1
 
-        fashion_data = fetch_tags_posts("fashion", count=100)
-        if not fashion_data:
-            print("[!] Failed to get to Fashion Tag Posts")
-            session_close()
-
-        count = 0
-        df_data = {
-            "Post URL": [],
-            "User": [],
-            "Author Name": [],
-            "Likes": [],
-            "Views": [],
-            "Shares": [],
-            "Comments": [],
-            "Comments Data": [],
-            "Caption": [],
-            "HashTags": [],
-            "Music": [],
-            "Date Posted": [],
-            "Date Collected": [],
-        }
-
-        for rec in fashion_data:
-            print(f'[=>] Post {count + 1}')
-            # print(f'[*] ID: {rec["id"]}')
-
-            desc = rec["desc"]
-            hashpos = desc.find("#")
-            hashtags = desc[hashpos:]
-            desc = desc[:hashpos]
-
-            # print(f'[*] Caption: {desc}')
-            # print(f'[*] HashTags: {hashtags}')
-            # print(f'[*] Like Count: {rec["stats"]["diggCount"]}')
-            # print(f'[*] View Count: {rec["stats"]["playCount"]}')
-            # print(f'[*] Share Count: {rec["stats"]["shareCount"]}')
-            # print(f'[*] Comment Count: {rec["stats"]["commentCount"]}')
-            # print(f'[*] Author: {rec["author"]["nickname"]}')
-            # print(f'[*] Author User: {rec["author"]["uniqueId"]}')
-
-            comments_data = []
-            comments = get_comments_info(rec["author"]["uniqueId"], rec["id"])
-            if not comments:
-                print("[!] Failed to get to Comments for Post")
-            else:
-                # print(f'[*] Total Comments: {comments["total"]}')
-                for comts in comments["comments"]:
-                    comments_data.append(comts["text"])
-                    # print(f'[*] Comment: {comts["text"]}')
-
-            # if 'music' in rec:
-            #     print(f'[*] Post Music: {rec["music"]["title"]}')
-            # print(f'[*] Post Date: {datetime.fromtimestamp(rec["createTime"])}')
-            # print(f'[*] Collected Date: {datetime.now()}')
-            # print(f'[*] Post URL: https://www.tiktok.com/@{rec["author"]["uniqueId"]}/{rec["id"]}')
-
-            # Add to data cache
-            df_data["Post URL"].append(f'https://www.tiktok.com/@{rec["author"]["uniqueId"]}/{rec["id"]}')
-            df_data["User"].append(rec["author"]["uniqueId"])
-            df_data["Author Name"].append(rec["author"]["nickname"])
-            df_data["Likes"].append(rec["stats"]["diggCount"])
-            df_data["Views"].append(rec["stats"]["playCount"])
-            df_data["Shares"].append(rec["stats"]["shareCount"])
-            df_data["Comments"].append(rec["stats"]["commentCount"])
-            df_data["Comments Data"].append(comments_data)
-            df_data["Caption"].append(desc)
-            df_data["HashTags"].append(hashtags)
-            df_data["Music"].append(rec["music"]["title"] if 'music' in rec else '')
-            df_data["Date Posted"].append(datetime.fromtimestamp(rec["createTime"]))
-            df_data["Date Collected"].append(datetime.now())
-
-            count += 1
-
-        # CSV export through dataframe
-        df_fashion = pd.DataFrame(df_data)
-        curr_timestamp = datetime.timestamp(datetime.now())
-        df_fashion.to_csv(f"sample_fashion_posts-{int(curr_timestamp)}.csv", index=False)
+        scrap_file = scrap_fashion_posts()
+        print(f'[=>] Scraped Fashion Posts: {scrap_file}')
 
         session.browser.close()
 
