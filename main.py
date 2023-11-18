@@ -47,17 +47,15 @@ instance = {
 }
 
 # SERVER SETUP
-server_host = '127.0.0.1'
-server_port = '5000'
+server_host = '0.0.0.0'
+server_port = '8000'
 
 app = Flask(__name__)
 CORS(app)
 
 # Utility Functions
-isDir = os.path.isdir
 isExist = os.path.exists
 joinPath = os.path.join
-realPath = os.path.realpath
 projectDir = os.path.dirname(__file__)
 
 
@@ -297,8 +295,8 @@ def fetch_search(keyword="fashion", count=10):
     params["from_page"] = "search"
     params["keyword"] = keyword
     params["root_referer"] = configs["DefaultURL"]
-    params[
-        "web_search_code"] = """{"tiktok":{"client_params_x":{"search_engine":{"ies_mt_user_live_video_card_use_libra":1,"mt_search_general_user_live_card":1}},"search_server":{}}}"""
+    params["web_search_code"] = """{"tiktok":{"client_params_x":{"search_engine":
+    {"ies_mt_user_live_video_card_use_libra":1,"mt_search_general_user_live_card":1}},"search_server":{}}}"""
 
     res = []
     found = 0
@@ -492,6 +490,7 @@ def scrap_fashion_posts():
     df_fashion = pd.DataFrame(df_data)
     curr_timestamp = datetime.timestamp(datetime.now())
     scrap_file = f"sample_fashion_posts-{int(curr_timestamp)}.csv"
+    createDir(joinPath(projectDir, "dumps"))
     file_path = joinPath(projectDir, "dumps", scrap_file)
     df_fashion.to_csv(file_path, index=False)
 
@@ -500,7 +499,7 @@ def scrap_fashion_posts():
     session.playwright.stop()
 
     instance["TaskLogs"] = ("[=>] Scrapping Completed: Download using this url: "
-                            f"http://{server_host}:{server_port}/download/{scrap_file}<br>")
+                            f"http://127.0.0.1:{server_port}/download/{scrap_file}<br>")
     instance["TaskRunning"] = False
 
 
@@ -540,7 +539,6 @@ def downloadFile(filename):
 
 if __name__ == '__main__':
     print('[=>] TikTok Fashion Scraper Starting')
-    createDir(joinPath(projectDir, "dumps"))
 
     print('[=>] Service Running on http://{}:{}'.format(server_host, server_port))
     app.run(host=server_host, port=int(server_port), debug=False)
