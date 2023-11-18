@@ -18,3 +18,12 @@ docker build . -t tiktok-challenge
 ```sh
 docker run -p 8000:8000 tiktok-challenge
 ```
+
+- Running server with single process - single task for testing purpose.
+- After running on the docker, service will be forwarded to localhost:8000
+
+```code
+Start Scrapping Task: http://localhost:8000/scrap
+Check Scrapping Status: http://localhost:8000/status
+Download Dumped File: http://localhost:8000/download/[path]
+```
