@@ -1,15 +1,18 @@
+import os
 import json
 import random
 import requests
+import threading
 import pandas as pd
+from queue import Queue
+from flask import Flask
+from flask_cors import CORS
+from flask import send_file
 from datetime import datetime
 from bs4 import BeautifulSoup
 from collections import namedtuple
 from urllib.parse import urlencode, quote
 from playwright.sync_api import sync_playwright
-
-# Browser session state
-session = namedtuple('session', ['browser', 'context', 'page', 'info'])
 
 # Default Configs
 configs = {
@@ -35,6 +38,57 @@ headers = {
     'Authority': 'www.tiktok.com',
     "User-Agent": configs["UserAgent"],
 }
+
+# Browser session state
+session = namedtuple('session', ['playwright', 'browser', 'context', 'page', 'info'])
+instance = {
+    "TaskLogs": '',
+    "TaskRunning": False,
+}
+
+# SERVER SETUP
+server_host = '127.0.0.1'
+server_port = '5000'
+
+app = Flask(__name__)
+CORS(app)
+
+# Utility Functions
+isDir = os.path.isdir
+isExist = os.path.exists
+joinPath = os.path.join
+realPath = os.path.realpath
+projectDir = os.path.dirname(__file__)
+
+
+def createDir(path, override=False):
+    if override or not isExist(path):
+        os.mkdir(path)
+        return True
+    return False
+
+
+def threaded(f, daemon=False):
+    def wrapped_f(q, *args, **kwargs):
+        """this function calls the decorated function and puts the
+        result in a queue"""
+        ret = f(*args, **kwargs)
+        q.put(ret)
+
+    def wrap(*args, **kwargs):
+        """this is the function returned from the decorator. It fires off
+        wrapped_f in a new thread and returns the thread object with
+        the result queue attached"""
+
+        q = Queue()
+
+        t = threading.Thread(target=wrapped_f, args=(q,) + args, kwargs=kwargs)
+        t.daemon = daemon
+        t.start()
+        t.result_queue = q
+        return t
+
+    return wrap
 
 
 def get_params():
@@ -83,19 +137,12 @@ def fetch_data(url, headers):
     result = session.page.evaluate(js_fetch)
     try:
         return json.loads(result)
-    except ValueError as e:
+    except ValueError:
         return result
 
 
 def encode_url(base, params):
     return f"{base}?{urlencode(params, quote_via=quote)}"
-
-
-# Close current browser instance
-def session_close():
-    if session.browser is not None:
-        session.browser.close()
-    exit(0)
 
 
 def extract_stateinfo(content):
@@ -250,7 +297,8 @@ def fetch_search(keyword="fashion", count=10):
     params["from_page"] = "search"
     params["keyword"] = keyword
     params["root_referer"] = configs["DefaultURL"]
-    params["web_search_code"] = """{"tiktok":{"client_params_x":{"search_engine":{"ies_mt_user_live_video_card_use_libra":1,"mt_search_general_user_live_card":1}},"search_server":{}}}"""
+    params[
+        "web_search_code"] = """{"tiktok":{"client_params_x":{"search_engine":{"ies_mt_user_live_video_card_use_libra":1,"mt_search_general_user_live_card":1}},"search_server":{}}}"""
 
     res = []
     found = 0
@@ -309,7 +357,51 @@ def fetch_post_comments(post_id="7198199504405843205", count=10):
     return res[:count]
 
 
+@threaded
 def scrap_fashion_posts():
+    instance["TaskLogs"] = "[=>] Scrapping Task started...<br><br>"
+    print(f"[=>] Scrapping Task started...")
+
+    instance["TaskLogs"] += '[=>] Starting Browser Instance<br>'
+    print(f"[=>] Starting Browser Instance")
+    session.playwright = sync_playwright().start()
+    mobile_device = session.playwright.devices['iPhone 14 Pro Max']
+
+    session.browser = session.playwright.chromium.launch(
+        headless=True,
+        args=["--user-agent={}".format(configs["UserAgent"])],
+        ignore_default_args=["--mute-audio", "--hide-scrollbars"],
+    )
+
+    session.context = session.browser.new_context(
+        **mobile_device,
+        bypass_csp=True,
+        locale=configs["Locale"],
+        timezone_id=configs["TimeZone"],
+    )
+
+    session.page = session.context.new_page()
+    session.page.goto(configs["DefaultURL"], wait_until="networkidle")
+    session.info = session.page.evaluate("""() => {
+          return {
+            platform: window.navigator.platform,
+            deviceScaleFactor: window.devicePixelRatio,
+            user_agent: window.navigator.userAgent,
+            screen_width: window.screen.width,
+            screen_height: window.screen.height,
+            history: window.history.length,
+            browser_language: window.navigator.language,
+            browser_platform: window.navigator.platform,
+            browser_name: window.navigator.appCodeName,
+            browser_version: window.navigator.appVersion,
+          };
+        }""")
+
+    cookies = session.context.cookies()
+    cookies = {cookie["name"]: cookie["value"] for cookie in cookies}
+    instance["TaskLogs"] += f'[*] Cookies: {cookies}<br>[=>] Browser Ready!<br>[=>] Starting Scrapping!<br>'
+    print(f"[=>] Browser Ready!")
+
     count = 0
     df_data = {
         "Post URL": [],
@@ -335,12 +427,15 @@ def scrap_fashion_posts():
         post_data = fetch_tags_posts(tag[0], count=tag[1])
         if not post_data:
             print(f"[!] Failed to get to {tag[0]} Tag Posts")
+            instance["TaskLogs"] += f"[!] Failed to get to {tag[0]} Tag Posts<br>"
         else:
             print(f'[=>] Tag: {tag[0]}, Count: {tag[1]}')
+            instance["TaskLogs"] += f"[=>] Tag: {tag[0]}, Count: {tag[1]}<br>"
             fashion_data.extend(post_data)
 
     for rec in fashion_data:
         print(f'[=>] Post {count + 1}')
+        instance["TaskLogs"] += f"[=>] Post {count + 1}<br>"
         # print(f'[*] ID: {rec["id"]}')
 
         desc = rec["desc"]
@@ -361,6 +456,7 @@ def scrap_fashion_posts():
         comments = get_comments_info(rec["author"]["uniqueId"], rec["id"])
         if not comments:
             print("[!] Failed to get to Comments for Post")
+            instance["TaskLogs"] += f"[!] Failed to get to Comments for Post<br>"
         else:
             # print(f'[*] Total Comments: {comments["total"]}')
             for comts in comments["comments"]:
@@ -390,92 +486,63 @@ def scrap_fashion_posts():
 
         count += 1
 
+    instance["TaskLogs"] += f"[=>] Scrapping Completed, Please wait...<br>"
+
     # CSV export through dataframe
     df_fashion = pd.DataFrame(df_data)
     curr_timestamp = datetime.timestamp(datetime.now())
-    file_name = f"sample_fashion_posts-{int(curr_timestamp)}.csv"
-    df_fashion.to_csv(file_name, index=False)
-    return file_name
+    scrap_file = f"sample_fashion_posts-{int(curr_timestamp)}.csv"
+    file_path = joinPath(projectDir, "dumps", scrap_file)
+    df_fashion.to_csv(file_path, index=False)
+
+    instance["TaskLogs"] += f"[=>] Closing Browser Instance..<br>"
+    session.browser.close()
+    session.playwright.stop()
+
+    instance["TaskLogs"] = ("[=>] Scrapping Completed: Download using this url: "
+                            f"http://{server_host}:{server_port}/download/{scrap_file}<br>")
+    instance["TaskRunning"] = False
+
+
+# Server functions
+@app.route("/", methods=['GET'])
+def index():
+    return "<p>Scraper Server Running...</p>"
+
+
+@app.route("/scrap", methods=['GET'])
+def scrapper():
+    if not instance["TaskRunning"]:
+        instance["TaskRunning"] = True
+        scrap_fashion_posts()
+        return "<p>Scrapping Task Started...</p>"
+    else:
+        return "<p>Task Already Running...</p>"
+
+
+@app.route("/status", methods=['GET'])
+def status():
+    if not instance["TaskRunning"] and len(instance["TaskLogs"]) < 2:
+        return "<p>Scrapping Not Started...</p>"
+    else:
+        return instance["TaskLogs"]
+
+
+@app.route('/download/<path:filename>', methods=['GET'])
+def downloadFile(filename):
+    filename = str(filename).strip()
+    # Simple file existence check
+    file_path = joinPath(projectDir, "dumps", filename)
+    if not isExist(file_path):
+        return "<p>File not found!</p>"
+    return send_file(file_path, as_attachment=True)
 
 
 if __name__ == '__main__':
     print('[=>] TikTok Fashion Scraper Starting')
+    createDir(joinPath(projectDir, "dumps"))
 
-    with sync_playwright() as playwright:
-        mobile_device = playwright.devices['iPhone 14 Pro Max']
-
-        session.browser = playwright.chromium.launch(
-            headless=True,
-            args=["--user-agent={}".format(configs["UserAgent"])],
-            ignore_default_args=["--mute-audio", "--hide-scrollbars"],
-        )
-
-        session.context = session.browser.new_context(
-            **mobile_device,
-            bypass_csp=True,
-            locale=configs["Locale"],
-            timezone_id=configs["TimeZone"],
-        )
-
-        session.page = session.context.new_page()
-        session.page.goto(configs["DefaultURL"], wait_until="networkidle")
-        session.info = session.page.evaluate("""() => {
-          return {
-            platform: window.navigator.platform,
-            deviceScaleFactor: window.devicePixelRatio,
-            user_agent: window.navigator.userAgent,
-            screen_width: window.screen.width,
-            screen_height: window.screen.height,
-            history: window.history.length,
-            browser_language: window.navigator.language,
-            browser_platform: window.navigator.platform,
-            browser_name: window.navigator.appCodeName,
-            browser_version: window.navigator.appVersion,
-          };
-        }""")
-
-        cookies = session.context.cookies()
-        cookies = {cookie["name"]: cookie["value"] for cookie in cookies}
-        print("[*] Cookies: ", cookies)
-
-        # comments = get_comments_info()
-        # if not comments:
-        #     print("[!] Failed to get to Comments for Post")
-        #     session_close()
-        # print(comments)
-
-        # suggest = fetch_search_suggest("fashion")
-        # if not suggest:
-        #     print("[!] Failed to get to Fashion Search Suggestions")
-        #     session_close()
-        #
-        # print(suggest)
-
-        # result = fetch_post_comments("7198199504405843205", 10)
-        # print(result)
-
-        # result = fetch_challenge()
-        # print(result)
-
-        # recomd = fetch_recommenations(10)
-        # if not recomd:
-        #     print("[!] Failed to get to Recommended Posts")
-        #     session_close()
-        #
-        # count = 0
-        # for rec in recomd:
-        #     print(f'[=>] Post {count + 1}: {rec["id"]}')
-        #     print(f'[*] Description: {rec["desc"]}')
-        #     print(f'[*] Play Count: {rec["stats"]["playCount"]}')
-        #     print(f'[*] Share Count: {rec["stats"]["shareCount"]}')
-        #     print(f'[*] Comment Count: {rec["stats"]["commentCount"]}')
-        #     print(f'[*] Author: {rec["author"]["nickname"]}')
-        #     print()
-        #     count += 1
-
-        scrap_file = scrap_fashion_posts()
-        print(f'[=>] Scraped Fashion Posts: {scrap_file}')
-
-        session.browser.close()
+    print('[=>] Service Running on http://{}:{}'.format(server_host, server_port))
+    app.run(host=server_host, port=int(server_port), debug=False)
 
     print("[=>] TikTok Fashion Scraper Stopped")
