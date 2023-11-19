@@ -420,7 +420,7 @@ def scrap_fashion_posts():
     fashion_data = []
 
     # Fetch posts from different tags
-    tags = [("fashion", 30), ("outfit", 30), ("fashionweek", 30), ("streetwear", 10)]
+    tags = [("fashion", 25), ("femaleoutfit", 25), ("fashionweek", 25), ("femalestreetwear", 25)]
     for tag in tags:
         post_data = fetch_tags_posts(tag[0], count=tag[1])
         if not post_data:
@@ -537,10 +537,10 @@ def downloadFile(filename):
     return send_file(file_path, as_attachment=True)
 
 
-# if __name__ == '__main__':
-#     print('[=>] TikTok Fashion Scraper Starting')
+if __name__ == '__main__':
+    print('[=>] TikTok Fashion Scraper Starting')
 
-#     print('[=>] Service Running on http://{}:{}'.format(server_host, server_port))
-#     app.run(host=server_host, port=int(server_port), debug=False)
+    print('[=>] Service Running on http://{}:{}'.format(server_host, server_port))
+    app.run(host=server_host, port=int(server_port), debug=False)
 
-#     print("[=>] TikTok Fashion Scraper Stopped")
+    print("[=>] TikTok Fashion Scraper Stopped")

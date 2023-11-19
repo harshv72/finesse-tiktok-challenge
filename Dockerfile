@@ -20,4 +20,5 @@ RUN playwright install-deps
 
 # Start service
 EXPOSE 8000
-CMD [ "gunicorn", "-w", "1", "-b", "0.0.0.0", "main:app" ]
+CMD [ "python3", "main.py" ]
+# CMD [ "gunicorn", "-w", "1", "-b", "0.0.0.0", "main:app" ]
