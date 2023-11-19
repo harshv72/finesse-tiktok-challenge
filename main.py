@@ -537,10 +537,10 @@ def downloadFile(filename):
     return send_file(file_path, as_attachment=True)
 
 
-if __name__ == '__main__':
-    print('[=>] TikTok Fashion Scraper Starting')
+# if __name__ == '__main__':
+#     print('[=>] TikTok Fashion Scraper Starting')
 
-    print('[=>] Service Running on http://{}:{}'.format(server_host, server_port))
-    app.run(host=server_host, port=int(server_port), debug=False)
+#     print('[=>] Service Running on http://{}:{}'.format(server_host, server_port))
+#     app.run(host=server_host, port=int(server_port), debug=False)
 
-    print("[=>] TikTok Fashion Scraper Stopped")
+#     print("[=>] TikTok Fashion Scraper Stopped")
